@@ -15,12 +15,12 @@ import aiohttp
 # DDoSByZam - Bounded HTTP Testing Engine
 # ==========================================
 
-HARD_MAX_REQUESTS = 500
-HARD_MAX_CONCURRENCY = 5
-HARD_MAX_RPS = 5
-HARD_MAX_DURATION = 60
+HARD_MAX_REQUESTS = 1000
+HARD_MAX_CONCURRENCY = 30
+HARD_MAX_RPS = 30
+HARD_MAX_DURATION = 160
 HARD_MAX_TIMEOUT = 5
-HARD_MAX_BODY_BYTES = 65536
+HARD_MAX_BODY_BYTES = 99999
 
 
 # ==========================================
@@ -111,22 +111,22 @@ async def run_test(url, config):
     # --------------------------------------
 
     max_requests = min(
-        max(1, int(config.get("max_requests", 100))),
+        max(1, int(config.get("max_requests", 800))),
         HARD_MAX_REQUESTS
     )
 
     concurrency = min(
-        max(1, int(config.get("max_concurrency", 3))),
+        max(1, int(config.get("max_concurrency", 20))),
         HARD_MAX_CONCURRENCY
     )
 
     max_rps = min(
-        max(1, int(config.get("max_rps", 2))),
+        max(1, int(config.get("max_rps", 20))),
         HARD_MAX_RPS
     )
 
     duration = min(
-        max(1, int(config.get("duration_seconds", 20))),
+        max(1, int(config.get("duration_seconds", 60))),
         HARD_MAX_DURATION
     )
 
