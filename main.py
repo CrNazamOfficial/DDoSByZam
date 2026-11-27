@@ -1,205 +1,145 @@
 
-import asyncio
 import json
 import os
-from datetime import datetime, timezone
-
-from engine import run_test, validate_target
-
+from urllib.parse import urlparse
 
 CONFIG_FILE = "config.json"
-REPORT_DIRECTORY = "reports"
 
 
 def load_config():
-    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
-
-
-def save_report(url, result):
-    os.makedirs(REPORT_DIRECTORY, exist_ok=True)
-
-    report = {
-        "tool": "DDoSByZam",
-        "version": "2.0",
-        "timestamp": datetime.now(
-            timezone.utc
-        ).isoformat(),
-        "target": url,
-        "results": result
-    }
-
-    filename = datetime.now().strftime(
-        "report_%Y%m%d_%H%M%S.json"
-    )
-
-    path = os.path.join(
-        REPORT_DIRECTORY,
-        filename
-    )
-
-    with open(path, "w", encoding="utf-8") as file:
-        json.dump(report, file, indent=4)
-
-    print(f"\nReport saved: {path}")
-
-
-def show_result(result):
-    print("\n" + "=" * 42)
-    print("             TEST RESULTS")
-    print("=" * 42)
-
-    print(f"Attempted       : {result['attempted']}")
-    print(f"Completed       : {result['completed']}")
-    print(f"Incomplete      : {result['incomplete']}")
-    print(f"Successful      : {result['successful']}")
-    print(f"Failed          : {result['failed']}")
-
-    print("-" * 42)
-
-    print(f"Duration        : {result['duration_seconds']} s")
-    print(f"Actual RPS      : {result['requests_per_second']}")
-
-    print(f"Average latency : {result['average_latency_ms']} ms")
-    print(f"Median latency  : {result['median_latency_ms']} ms")
-    print(f"P95 latency     : {result['p95_latency_ms']} ms")
-    print(f"P99 latency     : {result['p99_latency_ms']} ms")
-
-    print(f"Bytes received  : {result['bytes_received']}")
-
-    print("-" * 42)
-    print("HTTP STATUS")
-
-    if result["http_statuses"]:
-        for status, count in result["http_statuses"].items():
-            print(f"  {status}: {count}")
-    else:
-        print("  No HTTP responses")
-
-    print("-" * 42)
-    print("ERRORS")
-
-    if result["errors"]:
-        for error, count in result["errors"].items():
-            print(f"  {error}: {count}")
-    else:
-        print("  None")
-
-    print("-" * 42)
-    print("STOP REASON")
-    print(result["stop_reason"])
-
-    print("=" * 42)
-
-
-def show_resource_summary(result):
-    samples = result["resource_monitor"]
-
-    print("\nLOCAL PROCESS MONITOR")
-
-    if not samples:
-        print("No resource samples.")
-        return
-
-    cpu_values = [
-        item["cpu_percent"] for item in samples
-    ]
-
-    memory_values = [
-        item["memory_mb"] for item in samples
-    ]
-
-    print(
-        "Average process CPU:",
-        round(sum(cpu_values) / len(cpu_values), 2),
-        "%"
-    )
-
-    print(
-        "Peak process RAM:",
-        round(max(memory_values), 2),
-        "MB"
-    )
-
-    print(
-        "Samples:",
-        len(samples)
-    )
-
-
-async def start_test():
-    try:
-        config = load_config()
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"Configuration error: {exc}")
-        return
-
-    url = input("\nTarget URL: ").strip()
-
-    valid, message = validate_target(url)
-
-    if not valid:
-        print(f"\nRejected: {message}")
-        return
-
-    print(f"\n{message}")
-    print("Only test systems you own or have explicit permission to test.")
-
-    confirmation = input(
-        "Type YES to confirm authorization: "
-    ).strip()
-
-    if confirmation != "YES":
-        print("Cancelled.")
-        return
-
-    print("\nStarting bounded HTTP performance test...")
+    if not os.path.exists(CONFIG_FILE):
+        return {"targets": []}
 
     try:
-        result = await run_test(url, config)
+        with open(CONFIG_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
 
-    except KeyboardInterrupt:
-        print("\nInterrupted.")
+        if not isinstance(data.get("targets"), list):
+            data["targets"] = []
+
+        return data
+
+    except (json.JSONDecodeError, OSError):
+        print("[!] config.json tidak bisa dibaca.")
+        return {"targets": []}
+
+
+def save_config(data):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4)
+        return True
+    except OSError as error:
+        print(f"[!] Gagal menyimpan: {error}")
+        return False
+
+
+def normalize_domain(value):
+    value = value.strip()
+
+    if not value:
+        return None
+
+    if "://" not in value:
+        value = "https://" + value
+
+    parsed = urlparse(value)
+
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.port not in (None, 443)
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+
+    return parsed.hostname.lower()
+
+
+def add_domain(data):
+    domain = normalize_domain(input("\nMasukkan domain: "))
+
+    if not domain:
+        print("[!] Format domain tidak valid.")
         return
 
-    except Exception as exc:
-        print(
-            f"\nTest error: {type(exc).__name__}: {exc}"
-        )
+    if domain in data["targets"]:
+        print("[!] Domain sudah ada.")
         return
 
-    show_result(result)
-    show_resource_summary(result)
+    data["targets"].append(domain)
 
-    save_report(url, result)
+    if save_config(data):
+        print(f"[+] Domain tersimpan: {domain}")
+
+
+def view_domains(data):
+    print("\n===== DAFTAR DOMAIN =====")
+
+    if not data["targets"]:
+        print("Belum ada domain tersimpan.")
+        return
+
+    for index, domain in enumerate(data["targets"], start=1):
+        print(f"{index}. {domain}")
+
+
+def remove_domain(data):
+    view_domains(data)
+
+    if not data["targets"]:
+        return
+
+    choice = input("\nNomor domain yang dihapus: ").strip()
+
+    if not choice.isdigit():
+        print("[!] Masukkan nomor yang benar.")
+        return
+
+    index = int(choice) - 1
+
+    if index < 0 or index >= len(data["targets"]):
+        print("[!] Nomor tidak ditemukan.")
+        return
+
+    removed = data["targets"].pop(index)
+
+    if save_config(data):
+        print(f"[+] Domain dihapus: {removed}")
 
 
 def main():
     while True:
+        data = load_config()
+
         print("""
-========================================
-               DDoSByZam
-             VERSION 2.0
-========================================
-[1] Start HTTP Load Test
-[2] Exit
-========================================
+================================
+          DDOSBYZAM
+================================
+[1] Tambah Domain
+[2] Lihat Domain
+[3] Hapus Domain
+[4] Keluar
+================================
 """)
 
-        choice = input("Select: ").strip()
+        choice = input("Pilih menu: ").strip()
 
         if choice == "1":
-            try:
-                asyncio.run(start_test())
-            except KeyboardInterrupt:
-                print("\nProgram interrupted.")
-
+            add_domain(data)
         elif choice == "2":
-            print("Exiting DDoSByZam.")
+            view_domains(data)
+        elif choice == "3":
+            remove_domain(data)
+        elif choice == "4":
+            print("Keluar.")
             break
-
         else:
-            print("Invalid selection.")
+            print("[!] Pilihan tidak valid.")
 
 
 if __name__ == "__main__":
