@@ -1,11 +1,8 @@
-
 {
-  "max_requests": 500,
-  "max_concurrency": 5,
-  "max_rps": 5,
-  "duration_seconds": 60,
-  "request_timeout": 5,
-  "monitor_interval": 1,
-  "max_consecutive_errors": 10,
-  "max_failure_ratio": 0.5
+  "targets": [],
+  "max_requests": 1000,
+  "max_concurrency": 30,
+  "max_rps": 30,
+  "duration_seconds": 160,
+  "request_timeout": 5
 }
